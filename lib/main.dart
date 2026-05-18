@@ -10,23 +10,36 @@ import 'package:quick_pdf/services/ad_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final adsInitialization = MobileAds.instance.initialize();
+
+  // Pre-load prefs before runApp so the correct screen shows on the
+  // very first frame — no blank screen or spinner at launch.
+  final prefs = await SharedPreferences.getInstance();
+  final hasSeenOnboarding = prefs.getBool('has_seen_onboarding') ?? false;
+
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
   ));
-  runApp(const ProviderScope(child: QuickPDFApp()));
-  adsInitialization.then((_) {
-    AdService().loadInterstitial();
+
+  runApp(ProviderScope(
+    child: QuickPDFApp(showOnboarding: !hasSeenOnboarding),
+  ));
+
+  // Initialise AdMob after the first frame so it never delays the UI.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    MobileAds.instance
+        .initialize()
+        .then((_) => AdService().loadInterstitial());
   });
 }
 
 class QuickPDFApp extends ConsumerWidget {
-  const QuickPDFApp({super.key});
+  final bool showOnboarding;
+  const QuickPDFApp({super.key, required this.showOnboarding});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeProvider);
-    const seed = Color(0xFF1E88E5); // vibrant but refined blue
+    const seed = Color(0xFF1E88E5);
 
     return MaterialApp(
       title: 'QuickPDF',
@@ -34,7 +47,7 @@ class QuickPDFApp extends ConsumerWidget {
       theme: _buildTheme(seed, Brightness.light),
       darkTheme: _buildTheme(seed, Brightness.dark),
       themeMode: themeMode,
-      home: const OnboardingWrapper(),
+      home: showOnboarding ? const OnboardingScreen() : const QuickPDFHomePage(),
     );
   }
 
@@ -80,45 +93,5 @@ class QuickPDFApp extends ConsumerWidget {
         contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 2),
       ),
     );
-  }
-}
-
-class OnboardingWrapper extends StatefulWidget {
-  const OnboardingWrapper({super.key});
-
-  @override
-  State<OnboardingWrapper> createState() => _OnboardingWrapperState();
-}
-
-class _OnboardingWrapperState extends State<OnboardingWrapper> {
-  bool _showOnboarding = true;
-  bool _checked = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _check();
-  }
-
-  Future<void> _check() async {
-    final prefs = await SharedPreferences.getInstance();
-    final seen = prefs.getBool('has_seen_onboarding') ?? false;
-    if (!mounted) return;
-    setState(() {
-      _showOnboarding = !seen;
-      _checked = true;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_checked) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-    return _showOnboarding
-        ? const OnboardingScreen()
-        : const QuickPDFHomePage();
   }
 }
