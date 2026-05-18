@@ -160,7 +160,6 @@ class _ConvertScreenState extends State<ConvertScreen> {
                 onReorder: _onReorder,
                 itemBuilder: (_, i) => _buildImageTile(i),
               ),
-              SliverToBoxAdapter(child: _buildAddMoreButton()),
               const SliverToBoxAdapter(child: SizedBox(height: 8)),
             ],
           ),
@@ -190,109 +189,168 @@ class _ConvertScreenState extends State<ConvertScreen> {
 
   Widget _buildOptionsCard() {
     return Card(
-      margin: const EdgeInsets.all(12),
+      margin: const EdgeInsets.fromLTRB(12, 10, 12, 0),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: const EdgeInsets.all(12),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _optionRow('Page size', _pageSizeSelector()),
-            if (_pageSize != 'fit') ...[
-              const Divider(height: 16),
-              _optionRow('Orientation', _orientationSelector()),
-            ],
-            const Divider(height: 16),
-            _optionRow('Quality', _qualitySelector()),
-            const Divider(height: 16),
-            _optionRow('Margins', _marginsSelector()),
+            // ── Page size + orientation ──────────────────────────────────
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _optionLabel('Page size'),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          _chip('A4', _pageSize == 'A4',
+                              () => setState(() => _pageSize = 'A4')),
+                          _chip('Letter', _pageSize == 'Letter',
+                              () => setState(() => _pageSize = 'Letter')),
+                          _chip('A3', _pageSize == 'A3',
+                              () => setState(() => _pageSize = 'A3')),
+                          _chip('Fit', _pageSize == 'fit',
+                              () => setState(() => _pageSize = 'fit')),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                if (_pageSize != 'fit') ...[
+                  const SizedBox(width: 14),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _optionLabel('Orientation'),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _iconChip(Icons.stay_current_portrait, !_landscape,
+                              () => setState(() => _landscape = false)),
+                          const SizedBox(width: 6),
+                          _iconChip(Icons.stay_current_landscape, _landscape,
+                              () => setState(() => _landscape = true)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 10),
+            const Divider(height: 1),
+            const SizedBox(height: 10),
+            // ── Quality + margins ────────────────────────────────────────
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _optionLabel('Quality'),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          _chip('High', _quality == 90,
+                              () => setState(() => _quality = 90)),
+                          _chip('Medium', _quality == 72,
+                              () => setState(() => _quality = 72)),
+                          _chip('Low', _quality == 50,
+                              () => setState(() => _quality = 50)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _optionLabel('Margins'),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          _chip('None', _margin == 0.0,
+                              () => setState(() => _margin = 0.0)),
+                          _chip('Normal', _margin == 20.0,
+                              () => setState(() => _margin = 20.0)),
+                          _chip('Wide', _margin == 40.0,
+                              () => setState(() => _margin = 40.0)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _optionRow(String label, Widget control) {
-    return Row(
-      children: [
-        SizedBox(
-          width: 88,
-          child: Text(
-            label,
-            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+  Widget _optionLabel(String text) => Text(
+        text,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: Colors.grey[600],
+          letterSpacing: 0.2,
+        ),
+      );
+
+  Widget _chip(String label, bool selected, VoidCallback onTap) {
+    final cs = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: selected ? cs.primary : cs.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: selected ? cs.onPrimary : cs.onSurfaceVariant,
           ),
         ),
-        Expanded(child: control),
-      ],
-    );
-  }
-
-  Widget _pageSizeSelector() {
-    return SegmentedButton<String>(
-      segments: const [
-        ButtonSegment(value: 'A4', label: Text('A4')),
-        ButtonSegment(value: 'Letter', label: Text('Letter')),
-        ButtonSegment(value: 'A3', label: Text('A3')),
-        ButtonSegment(value: 'fit', label: Text('Fit image')),
-      ],
-      selected: {_pageSize},
-      onSelectionChanged: (v) => setState(() => _pageSize = v.first),
-      style: const ButtonStyle(
-        visualDensity: VisualDensity.compact,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
     );
   }
 
-  Widget _orientationSelector() {
-    return SegmentedButton<bool>(
-      segments: const [
-        ButtonSegment(
-          value: false,
-          icon: Icon(Icons.stay_current_portrait, size: 16),
-          label: Text('Portrait'),
+  Widget _iconChip(IconData icon, bool selected, VoidCallback onTap) {
+    final cs = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        padding: const EdgeInsets.all(7),
+        decoration: BoxDecoration(
+          color: selected ? cs.primary : cs.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(6),
         ),
-        ButtonSegment(
-          value: true,
-          icon: Icon(Icons.stay_current_landscape, size: 16),
-          label: Text('Landscape'),
+        child: Icon(
+          icon,
+          size: 18,
+          color: selected ? cs.onPrimary : cs.onSurfaceVariant,
         ),
-      ],
-      selected: {_landscape},
-      onSelectionChanged: (v) => setState(() => _landscape = v.first),
-      style: const ButtonStyle(
-        visualDensity: VisualDensity.compact,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      ),
-    );
-  }
-
-  Widget _qualitySelector() {
-    return SegmentedButton<int>(
-      segments: const [
-        ButtonSegment(value: 90, label: Text('High')),
-        ButtonSegment(value: 72, label: Text('Medium')),
-        ButtonSegment(value: 50, label: Text('Low')),
-      ],
-      selected: {_quality},
-      onSelectionChanged: (v) => setState(() => _quality = v.first),
-      style: const ButtonStyle(
-        visualDensity: VisualDensity.compact,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      ),
-    );
-  }
-
-  Widget _marginsSelector() {
-    return SegmentedButton<double>(
-      segments: const [
-        ButtonSegment(value: 0.0, label: Text('None')),
-        ButtonSegment(value: 20.0, label: Text('Normal')),
-        ButtonSegment(value: 40.0, label: Text('Wide')),
-      ],
-      selected: {_margin},
-      onSelectionChanged: (v) => setState(() => _margin = v.first),
-      style: const ButtonStyle(
-        visualDensity: VisualDensity.compact,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
     );
   }
@@ -329,7 +387,7 @@ class _ConvertScreenState extends State<ConvertScreen> {
       key: ValueKey('${file.path}_$index'),
       color: Colors.transparent,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Row(
           children: [
             // Page number
@@ -417,20 +475,6 @@ class _ConvertScreenState extends State<ConvertScreen> {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAddMoreButton() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: OutlinedButton.icon(
-        onPressed: _addMore,
-        icon: const Icon(Icons.add_photo_alternate),
-        label: const Text('Add more images'),
-        style: OutlinedButton.styleFrom(
-          minimumSize: const Size.fromHeight(44),
         ),
       ),
     );

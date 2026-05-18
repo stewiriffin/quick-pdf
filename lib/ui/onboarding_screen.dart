@@ -24,6 +24,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     await prefs.setBool('has_seen_onboarding', true);
   }
 
+  Future<void> _skip() async {
+    await _markOnboardingComplete();
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const QuickPDFHomePage()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -41,6 +49,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         child: SafeArea(
           child: Column(
             children: [
+              // Skip button
+              Align(
+                alignment: Alignment.topRight,
+                child: TextButton(
+                  onPressed: _currentPage < 2 ? _skip : null,
+                  child: Text(
+                    'Skip',
+                    style: TextStyle(
+                      color: _currentPage < 2
+                          ? Colors.white70
+                          : Colors.transparent,
+                    ),
+                  ),
+                ),
+              ),
               Expanded(
                 child: PageView(
                   controller: _pageController,

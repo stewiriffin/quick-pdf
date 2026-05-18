@@ -14,124 +14,138 @@ class PdfSecurityScreen extends StatefulWidget {
 
 class _PdfSecurityScreenState extends State<PdfSecurityScreen> {
   bool _isProcessing = false;
-  String? _author;
-  String? _title;
+  final _authorController = TextEditingController();
+  final _titleController = TextEditingController();
+  final _subjectController = TextEditingController();
 
   bool get _hasChanges =>
-      (_author?.isNotEmpty ?? false) || (_title?.isNotEmpty ?? false);
+      _authorController.text.isNotEmpty ||
+      _titleController.text.isNotEmpty ||
+      _subjectController.text.isNotEmpty;
+
+  @override
+  void dispose() {
+    _authorController.dispose();
+    _titleController.dispose();
+    _subjectController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('PDF Security'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('Edit Metadata')),
       body: _isProcessing
           ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      'File: ${widget.pdfFile.path.split('/').last}',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Card(
+                  child: ListTile(
+                    leading: Icon(Icons.picture_as_pdf, color: cs.error),
+                    title: Text(
+                      widget.pdfFile.path.split('/').last,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(Icons.info_outline, color: Colors.orange, size: 18),
-                          SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Password encryption requires a native library and is not available in this version. Metadata editing is fully supported.',
-                              style: TextStyle(fontSize: 13),
-                            ),
-                          ),
-                        ],
-                      ),
+                    subtitle: Text(
+                      _fmtSize(widget.pdfFile.lengthSync()),
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
                     ),
-                    const SizedBox(height: 24),
-                    const Text(
-                      'Metadata',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      decoration: const InputDecoration(
-                        labelText: 'Author',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.person),
-                      ),
-                      onChanged: (value) => setState(() => _author = value),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      decoration: const InputDecoration(
-                        labelText: 'Title',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.title),
-                      ),
-                      onChanged: (value) => setState(() => _title = value),
-                    ),
-                    const SizedBox(height: 32),
-                    ElevatedButton.icon(
-                      onPressed: _hasChanges ? _applyMetadata : null,
-                      icon: const Icon(Icons.save),
-                      label: const Text('Save Metadata'),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    OutlinedButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Cancel'),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
+                const SizedBox(height: 16),
+                Text('Document Properties',
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: cs.onSurfaceVariant)),
+                const SizedBox(height: 8),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      children: [
+                        TextField(
+                          controller: _titleController,
+                          decoration: const InputDecoration(
+                            labelText: 'Title',
+                            prefixIcon: Icon(Icons.title),
+                            isDense: true,
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _authorController,
+                          decoration: const InputDecoration(
+                            labelText: 'Author',
+                            prefixIcon: Icon(Icons.person_outline),
+                            isDense: true,
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _subjectController,
+                          decoration: const InputDecoration(
+                            labelText: 'Subject',
+                            prefixIcon: Icon(Icons.subject),
+                            isDense: true,
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  height: 52,
+                  child: ElevatedButton.icon(
+                    onPressed: _hasChanges ? _applyMetadata : null,
+                    icon: const Icon(Icons.save),
+                    label: const Text('Save Metadata', style: TextStyle(fontSize: 16)),
+                  ),
+                ),
+              ],
             ),
     );
   }
 
+  String _fmtSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / 1024 / 1024).toStringAsFixed(2)} MB';
+  }
+
   Future<void> _applyMetadata() async {
     setState(() => _isProcessing = true);
-
     try {
       final updatedFile = await PDFManager.updatePDFMetadata(
         widget.pdfFile,
-        author: _author?.isNotEmpty == true ? _author : null,
-        title: _title?.isNotEmpty == true ? _title : null,
+        author: _authorController.text.trim().isNotEmpty ? _authorController.text.trim() : null,
+        title: _titleController.text.trim().isNotEmpty ? _titleController.text.trim() : null,
+        subject: _subjectController.text.trim().isNotEmpty ? _subjectController.text.trim() : null,
       );
-
       await DocumentDatabase().insertDocument(updatedFile.path);
-
       if (mounted) {
         PDFManager.hapticFeedbackSuccess();
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Metadata saved successfully')),
+          const SnackBar(
+            content: Text('Metadata saved'),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
         PDFManager.hapticFeedbackError();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text('Error: $e'), behavior: SnackBarBehavior.floating),
         );
+        setState(() => _isProcessing = false);
       }
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
     }
   }
 }

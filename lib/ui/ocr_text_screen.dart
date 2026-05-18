@@ -46,10 +46,17 @@ class _OcrTextScreenState extends State<OcrTextScreen> {
   int get _totalChars =>
       _results.fold(0, (s, r) => s + r.charCount);
 
-  String get _displayText =>
-      _isEditing && _editedTexts.isNotEmpty
-          ? _editedTexts[_currentPageIndex]
-          : (_results.isNotEmpty ? _results[_currentPageIndex].text : '');
+  String get _displayText {
+    if (_isEditing && _editedTexts.isNotEmpty) {
+      if (_currentPageIndex < _editedTexts.length) {
+        return _editedTexts[_currentPageIndex];
+      }
+    }
+    if (_results.isNotEmpty && _currentPageIndex < _results.length) {
+      return _results[_currentPageIndex].text;
+    }
+    return '';
+  }
 
   @override
   void initState() {
@@ -169,6 +176,7 @@ class _OcrTextScreenState extends State<OcrTextScreen> {
 
   int _matchCount(int pageIndex) {
     if (_searchQuery.isEmpty) return 0;
+    if (pageIndex < 0 || pageIndex >= _editedTexts.length) return 0;
     final q = _searchQuery.toLowerCase();
     final text = _editedTexts[pageIndex].toLowerCase();
     int n = 0, start = 0;
@@ -238,9 +246,9 @@ class _OcrTextScreenState extends State<OcrTextScreen> {
     if (all.isEmpty) return;
     try {
       final dir = await getApplicationDocumentsDirectory();
-      final base = _currentFile?.path.split('/').last
-              .replaceAll(RegExp(r'\.[^.]+$'), '') ??
-          'extracted';
+      final base = _currentFile != null
+          ? _currentFile!.path.split('/').last.replaceAll(RegExp(r'\.[^.]+$'), '')
+          : 'extracted';
       final outFile =
           File('${dir.path}/${base}_extracted.txt');
       await outFile.writeAsString(all);

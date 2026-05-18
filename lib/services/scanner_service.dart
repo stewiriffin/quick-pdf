@@ -68,31 +68,28 @@ class ScannerService {
     final bool blackAndWhite = params['bw'] as bool;
 
     final Uint8List bytes = File(inputPath).readAsBytesSync();
-    img.Image? image = img.decodeImage(bytes);
-    if (image == null) return inputPath;
 
-    if (blackAndWhite) {
-      image = img.grayscale(image);
-      // Normalise levels so the whitest point becomes 255 and darkest 0
-      image = img.normalize(image, min: 0, max: 255);
-      // Strong contrast boost for clean B&W text
-      image = img.contrast(image, contrast: 1.9);
-    } else {
-      // Colour mode: normalise + mild contrast boost
-      image = img.normalize(image, min: 10, max: 245);
-      image = img.contrast(image, contrast: 1.25);
+    if (!blackAndWhite) {
+      // Colour mode: write the raw camera JPEG unchanged.
+      // Any re-encoding through the image package risks desaturation depending
+      // on the device/package version — the camera's own processing already
+      // handles exposure, white-balance and sharpening correctly.
+      File(outputPath).writeAsBytesSync(bytes);
+      return outputPath;
     }
 
-    // Laplacian sharpening — improves text/edge clarity in both modes
-    image = img.convolution(
-      image,
-      filter: [0, -1, 0, -1, 5, -1, 0, -1, 0],
-      div: 1,
-      offset: 0,
-    );
+    // B&W mode: convert to grayscale and boost contrast for clean text scans.
+    img.Image? image = img.decodeImage(bytes);
+    if (image == null) {
+      File(outputPath).writeAsBytesSync(bytes);
+      return outputPath;
+    }
 
-    File(outputPath)
-        .writeAsBytesSync(img.encodeJpg(image, quality: 92));
+    image = img.grayscale(image);
+    image = img.normalize(image, min: 0, max: 255);
+    image = img.contrast(image, contrast: 1.9);
+
+    File(outputPath).writeAsBytesSync(img.encodeJpg(image, quality: 92));
     return outputPath;
   }
 }

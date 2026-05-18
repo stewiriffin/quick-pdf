@@ -5,13 +5,19 @@ import 'package:quick_pdf/ui/main_nav_page.dart';
 import 'package:quick_pdf/ui/onboarding_screen.dart';
 import 'package:quick_pdf/providers/theme_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:quick_pdf/services/ad_service.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final adsInitialization = MobileAds.instance.initialize();
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
   ));
   runApp(const ProviderScope(child: QuickPDFApp()));
+  adsInitialization.then((_) {
+    AdService().loadInterstitial();
+  });
 }
 
 class QuickPDFApp extends ConsumerWidget {
@@ -19,7 +25,7 @@ class QuickPDFApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isDarkMode = ref.watch(themeProvider);
+    final themeMode = ref.watch(themeProvider);
     const seed = Color(0xFF1E88E5); // vibrant but refined blue
 
     return MaterialApp(
@@ -27,7 +33,7 @@ class QuickPDFApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: _buildTheme(seed, Brightness.light),
       darkTheme: _buildTheme(seed, Brightness.dark),
-      themeMode: isDarkMode ? ThemeMode.dark : ThemeMode.light,
+      themeMode: themeMode,
       home: const OnboardingWrapper(),
     );
   }

@@ -172,28 +172,50 @@ class PDFManager {
     await source.dispose();
 
     final Uint8List compressedBytes = await target.save();
+    // Never write a larger file — fall back to the original bytes if compression
+    // produced no benefit (e.g. text-only / already-optimised PDFs).
+    final Uint8List outputBytes =
+        compressedBytes.length < pdfBytes.length ? compressedBytes : pdfBytes;
     final Directory appDocDir = await getApplicationDocumentsDirectory();
     final String filename = (outputName?.isNotEmpty == true)
         ? '$outputName.pdf'
         : 'Compressed_QuickPDF_${DateTime.now().millisecondsSinceEpoch}.pdf';
     final File compressedFile = File('${appDocDir.path}/$filename');
-    await compressedFile.writeAsBytes(compressedBytes);
+    await compressedFile.writeAsBytes(outputBytes);
     return compressedFile;
   }
 
-  /// Saves a rasterised copy of the PDF (password protection unavailable
-  /// in the pure-Dart pdf package).
-  static Future<File> encryptPDF(File pdfFile, String password) async {
+  /// Splits a PDF into individual pages (or a page range) and saves each
+  /// as a separate PDF. Registers each output in the document database.
+  static Future<List<File>> splitPDF(
+    File pdfFile, {
+    List<int>? pages, // 1-indexed; null = every page
+    String? outputNamePrefix,
+    void Function(int current)? onProgress,
+  }) async {
     final Uint8List pdfBytes = await pdfFile.readAsBytes();
-    final sourceDoc = await PdfDocument.openData(pdfBytes);
-    final pw.Document newDoc = pw.Document(compress: true);
+    final source = await PdfDocument.openData(pdfBytes);
+    final int total = source.pageCount;
+    final List<int> targetPages =
+        pages ?? List.generate(total, (i) => i + 1);
+    final Directory appDocDir = await getApplicationDocumentsDirectory();
+    final stem = outputNamePrefix ??
+        pdfFile.path.split('/').last.replaceAll(RegExp(r'\.[^.]+$'), '');
+    final List<File> results = [];
+    final String padLen = total.toString();
 
-    for (int i = 1; i <= sourceDoc.pageCount; i++) {
-      final page = await sourceDoc.getPage(i);
-      final pageImage = await page.render(
-        width: page.width.toInt(),
-        height: page.height.toInt(),
-      );
+    for (int i = 0; i < targetPages.length; i++) {
+      final int pageNum = targetPages[i];
+      onProgress?.call(i + 1);
+
+      if (pageNum < 1 || pageNum > total) continue;
+
+      final pw.Document single = pw.Document(compress: true);
+      final page = await source.getPage(pageNum);
+      final int rw = (page.width * 2).round();
+      final int rh = (page.height * 2).round();
+      final pageImage = await page.render(width: rw, height: rh);
+
       await Future.delayed(Duration.zero);
 
       final image = img.Image.fromBytes(
@@ -204,22 +226,24 @@ class PDFManager {
         numChannels: 4,
         order: img.ChannelOrder.rgba,
       );
-      final pngBytes = img.encodePng(image);
-      newDoc.addPage(pw.Page(
+      final encoded = Uint8List.fromList(img.encodeJpg(image, quality: 90));
+
+      single.addPage(pw.Page(
         pageFormat: PdfPageFormat(page.width, page.height),
         margin: pw.EdgeInsets.zero,
-        build: (_) => pw.Image(pw.MemoryImage(pngBytes)),
+        build: (_) => pw.Image(pw.MemoryImage(encoded)),
       ));
+
+      final padded = pageNum.toString().padLeft(padLen.length, '0');
+      final File outFile =
+          File('${appDocDir.path}/${stem}_p$padded.pdf');
+      await outFile.writeAsBytes(await single.save());
+      results.add(outFile);
+
       await Future.delayed(Duration.zero);
     }
-    await sourceDoc.dispose();
-
-    final Uint8List newBytes = await newDoc.save();
-    final Directory appDocDir = await getApplicationDocumentsDirectory();
-    final File outFile = File(
-        '${appDocDir.path}/Secured_QuickPDF_${DateTime.now().millisecondsSinceEpoch}.pdf');
-    await outFile.writeAsBytes(newBytes);
-    return outFile;
+    await source.dispose();
+    return results;
   }
 
   /// Updates PDF metadata by rasterising pages into a new document.

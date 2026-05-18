@@ -7,6 +7,7 @@ import 'package:quick_pdf/ui/merge_screen.dart';
 import 'package:quick_pdf/ui/ocr_text_screen.dart';
 import 'package:quick_pdf/ui/pdf_security_screen.dart';
 import 'package:quick_pdf/ui/scanner_screen.dart';
+import 'package:quick_pdf/ui/split_screen.dart';
 
 class ToolsScreen extends StatelessWidget {
   const ToolsScreen({super.key});
@@ -57,6 +58,19 @@ class ToolsScreen extends StatelessWidget {
             },
           ),
           _Tool(
+            icon: Icons.call_split,
+            color: Colors.deepPurple.shade500,
+            title: 'Split PDF',
+            subtitle: 'Extract pages or split into individual PDF files',
+            onTap: () async {
+              final r = await FilePickerService.pickMultipleFiles(
+                  allowedExtensions: ['pdf']);
+              if (r == null || r.isEmpty || !context.mounted) return;
+              Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => SplitScreen(file: r.first)));
+            },
+          ),
+          _Tool(
             icon: Icons.compress,
             color: Colors.red.shade600,
             title: 'Compress PDF',
@@ -84,8 +98,8 @@ class ToolsScreen extends StatelessWidget {
           _Tool(
             icon: Icons.text_snippet_outlined,
             color: Colors.indigo.shade600,
-            title: 'Extract Text',
-            subtitle: 'OCR text from PDFs and images (offline)',
+            title: 'Extract Text (OCR)',
+            subtitle: 'Read text from PDFs and images — fully offline',
             onTap: () async {
               final r = await FilePickerService.pickMultipleFiles(
                 allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'bmp', 'webp'],
@@ -96,12 +110,12 @@ class ToolsScreen extends StatelessWidget {
             },
           ),
           const Divider(indent: 16, endIndent: 16, height: 24),
-          _header(context, 'Security & Metadata'),
+          _header(context, 'Metadata'),
           _Tool(
             icon: Icons.edit_document,
-            color: Colors.purple.shade600,
+            color: Colors.brown.shade500,
             title: 'Edit Metadata',
-            subtitle: 'Set author, title, and other PDF properties',
+            subtitle: 'Set title, author, and subject of a PDF',
             onTap: () async {
               final r = await FilePickerService.pickMultipleFiles(
                   allowedExtensions: ['pdf']);

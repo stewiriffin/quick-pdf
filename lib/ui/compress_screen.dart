@@ -570,7 +570,7 @@ class _CompressScreenState extends State<CompressScreen> {
           ),
           const SizedBox(height: 16),
           Text(
-            enlarged ? 'File is larger than original' : 'Compressed successfully',
+            enlarged ? 'Could not reduce file size' : 'Compressed successfully',
             style: Theme.of(context).textTheme.titleLarge,
             textAlign: TextAlign.center,
           ),

@@ -86,10 +86,14 @@ class DocumentDatabase extends ChangeNotifier {
 
     for (final doc in all) {
       final path = doc['path'] as String?;
-      if (path != null && File(path).existsSync()) {
+      if (path == null) {
+        continue;
+      }
+      final exists = await File(path).exists();
+      if (exists) {
         valid.add(doc);
         if (valid.length >= limit) break;
-      } else if (path != null) {
+      } else {
         orphaned.add(path);
       }
     }
@@ -131,11 +135,17 @@ class DocumentDatabase extends ChangeNotifier {
       limit: limit * 2,
     );
 
-    // Filter out orphaned entries without auto-purge (search is read-only)
-    return results.where((doc) {
+    // Filter out orphaned entries (async)
+    final valid = <Map<String, dynamic>>[];
+    for (final doc in results) {
       final path = doc['path'] as String?;
-      return path != null && File(path).existsSync();
-    }).take(limit).toList();
+      if (path == null) continue;
+      if (await File(path).exists()) {
+        valid.add(doc);
+        if (valid.length >= limit) break;
+      }
+    }
+    return valid;
   }
 
   Future<void> updateLastOpened(String path) async {
