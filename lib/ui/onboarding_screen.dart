@@ -12,6 +12,7 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
+  static const int _pageCount = 4;
 
   @override
   void dispose() {
@@ -19,13 +20,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     super.dispose();
   }
 
-  Future<void> _markOnboardingComplete() async {
+  Future<void> _finish() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('has_seen_onboarding', true);
-  }
-
-  Future<void> _skip() async {
-    await _markOnboardingComplete();
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => const QuickPDFHomePage()),
@@ -34,6 +31,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isLast = _currentPage == _pageCount - 1;
+
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
@@ -41,109 +40,101 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFF1976D2),
-              Color(0xFF42A5F5),
+              Color(0xFF1A237E), // navy primary
+              Color(0xFF283593),
             ],
           ),
         ),
         child: SafeArea(
           child: Column(
             children: [
-              // Skip button
+              // ── Skip button (every page) ──
               Align(
                 alignment: Alignment.topRight,
                 child: TextButton(
-                  onPressed: _currentPage < 2 ? _skip : null,
-                  child: Text(
+                  onPressed: _finish,
+                  child: const Text(
                     'Skip',
-                    style: TextStyle(
-                      color: _currentPage < 2
-                          ? Colors.white70
-                          : Colors.transparent,
-                    ),
+                    style: TextStyle(color: Colors.white70),
                   ),
                 ),
               ),
+
+              // ── Pages ──
               Expanded(
                 child: PageView(
                   controller: _pageController,
-                  onPageChanged: (int page) {
-                    setState(() {
-                      _currentPage = page;
-                    });
-                  },
+                  onPageChanged: (page) => setState(() => _currentPage = page),
                   children: const [
                     _OnboardingPage(
                       title: 'Privacy First',
-                      description: 'Your files never leave your device.\nAll processing happens 100% offline.',
+                      description:
+                          'Your files never leave your device.\nAll processing happens 100% offline.',
                       icon: Icons.privacy_tip,
-                      color: Colors.white,
                     ),
                     _OnboardingPage(
                       title: 'All-in-One Utility',
-                      description: 'Scan, Merge, and Compress in seconds.\nOne app for all your PDF needs.',
+                      description:
+                          'Scan, Merge, Compress, Sign, and more.\nOne app for all your PDF needs.',
                       icon: Icons.widgets,
-                      color: Colors.white,
                     ),
                     _OnboardingPage(
                       title: 'Lightweight & Powerful',
-                      description: 'Powerful tools, minimal storage.\nOptimized for performance and size.',
+                      description:
+                          'Powerful tools, minimal footprint.\nOptimized for performance and speed.',
                       icon: Icons.flash_on,
-                      color: Colors.white,
+                    ),
+                    _OnboardingPage(
+                      title: 'Works 100% Offline',
+                      description:
+                          'No internet needed for any document task.\nYour documents never leave your device.',
+                      icon: Icons.cloud_off_outlined,
                     ),
                   ],
                 ),
               ),
+
+              // ── Dot indicators ──
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: List.generate(
-                  3,
-                  (index) => AnimatedContainer(
+                  _pageCount,
+                  (i) => AnimatedContainer(
                     duration: const Duration(milliseconds: 300),
                     margin: const EdgeInsets.symmetric(horizontal: 4),
-                    width: _currentPage == index ? 12 : 8,
+                    width: _currentPage == i ? 14 : 8,
                     height: 8,
                     decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: _currentPage == index
-                          ? Colors.white
-                          : Colors.white.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(4),
+                      color: _currentPage == i
+                          ? const Color(0xFFFFB300) // amber accent
+                          : Colors.white.withValues(alpha: 0.4),
                     ),
                   ),
                 ),
               ),
               const SizedBox(height: 24),
+
+              // ── Next / Get Started ──
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: ElevatedButton(
-                  onPressed: _currentPage < 2
-                      ? () => _pageController.nextPage(
-                            duration: const Duration(milliseconds: 300),
+                  onPressed: isLast
+                      ? _finish
+                      : () => _pageController.nextPage(
+                            duration: const Duration(milliseconds: 350),
                             curve: Curves.easeInOut,
-                          )
-                      : () async {
-                            await _markOnboardingComplete();
-                            if (context.mounted) {
-                              Navigator.of(context).pushReplacement(
-                                MaterialPageRoute(
-                                  builder: (context) => const QuickPDFHomePage(),
-                                ),
-                              );
-                            }
-                          },
+                          ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: const Color(0xFF1976D2),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 32,
-                      vertical: 16,
-                    ),
+                    backgroundColor: const Color(0xFFFFB300),
+                    foregroundColor: Colors.black87,
+                    minimumSize: const Size.fromHeight(52),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(30),
                     ),
                   ),
                   child: Text(
-                    _currentPage < 2 ? 'Next' : 'Get Started',
+                    isLast ? 'Get Started' : 'Next',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -164,44 +155,46 @@ class _OnboardingPage extends StatelessWidget {
   final String title;
   final String description;
   final IconData icon;
-  final Color color;
 
   const _OnboardingPage({
     required this.title,
     required this.description,
     required this.icon,
-    required this.color,
   });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(40.0),
+      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            icon,
-            size: 80,
-            color: color,
+          Container(
+            width: 110,
+            height: 110,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(28),
+            ),
+            child: Icon(icon, size: 56, color: Colors.white),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 28),
           Text(
             title,
-            style: TextStyle(
-              fontSize: 24,
+            style: const TextStyle(
+              fontSize: 26,
               fontWeight: FontWeight.bold,
-              color: color,
+              color: Colors.white,
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           Text(
             description,
             textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: 16,
-              color: color.withValues(alpha: 0.9),
-              height: 1.5,
+              fontSize: 15,
+              color: Colors.white.withValues(alpha: 0.88),
+              height: 1.6,
             ),
           ),
         ],

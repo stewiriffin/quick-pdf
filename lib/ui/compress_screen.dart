@@ -1,3 +1,4 @@
+import 'package:quick_pdf/services/error_logger.dart';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -166,7 +167,8 @@ class _CompressScreenState extends State<CompressScreen> {
         },
       );
 
-      await DocumentDatabase().insertDocument(out.path);
+      final thumbPath = await PDFManager.generateThumbnail(out.path);
+      await DocumentDatabase().insertDocument(out.path, thumbnailPath: thumbPath);
       PDFManager.hapticFeedbackSuccess();
 
       if (mounted) {
@@ -176,7 +178,8 @@ class _CompressScreenState extends State<CompressScreen> {
           _compressedSize = out.lengthSync();
         });
       }
-    } catch (e) {
+    } catch (e, stack) {
+      await ErrorLogger.log('compress', e, stack);
       PDFManager.hapticFeedbackError();
       if (mounted) {
         setState(() {

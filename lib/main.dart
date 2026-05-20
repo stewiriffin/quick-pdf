@@ -39,7 +39,7 @@ class QuickPDFApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeProvider);
-    const seed = Color(0xFF1E88E5);
+    const seed = Color(0xFF1A237E); // deep navy primary
 
     return MaterialApp(
       title: 'QuickPDF',
@@ -52,7 +52,11 @@ class QuickPDFApp extends ConsumerWidget {
   }
 
   ThemeData _buildTheme(Color seed, Brightness brightness) {
-    final cs = ColorScheme.fromSeed(seedColor: seed, brightness: brightness);
+    final cs = ColorScheme.fromSeed(
+      seedColor: seed,
+      brightness: brightness,
+      secondary: const Color(0xFFFFB300), // amber accent
+    );
     return ThemeData(
       useMaterial3: true,
       colorScheme: cs,

@@ -5,7 +5,14 @@ import 'package:quick_pdf/ui/convert_screen.dart';
 import 'package:quick_pdf/ui/format_converter_screen.dart';
 import 'package:quick_pdf/ui/merge_screen.dart';
 import 'package:quick_pdf/ui/ocr_text_screen.dart';
+import 'package:quick_pdf/ui/annotate_pdf_screen.dart';
+import 'package:quick_pdf/ui/batch_screen.dart';
+import 'package:quick_pdf/ui/export_text_screen.dart';
+import 'package:quick_pdf/ui/page_manager_screen.dart';
+import 'package:quick_pdf/ui/password_protect_screen.dart';
 import 'package:quick_pdf/ui/pdf_security_screen.dart';
+import 'package:quick_pdf/ui/sign_pdf_screen.dart';
+import 'package:quick_pdf/ui/watermark_screen.dart';
 import 'package:quick_pdf/ui/scanner_screen.dart';
 import 'package:quick_pdf/ui/split_screen.dart';
 
@@ -109,8 +116,75 @@ class ToolsScreen extends StatelessWidget {
                   builder: (_) => OcrTextScreen(file: r.first)));
             },
           ),
+          _Tool(
+            icon: Icons.text_fields,
+            color: Colors.deepOrange.shade600,
+            title: 'Export Text',
+            subtitle: 'OCR all pages and export as .txt',
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const ExportTextScreen())),
+          ),
           const Divider(indent: 16, endIndent: 16, height: 24),
-          _header(context, 'Metadata'),
+          _header(context, 'Annotate & Sign'),
+          _Tool(
+            icon: Icons.draw_outlined,
+            color: Colors.purple.shade600,
+            title: 'Annotate PDF',
+            subtitle: 'Draw on PDF pages with pen and highlighter',
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const AnnotatePdfScreen())),
+          ),
+          _Tool(
+            icon: Icons.draw,
+            color: Colors.green.shade700,
+            title: 'Sign PDF',
+            subtitle: 'Draw and place your signature on a PDF',
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const SignPdfScreen())),
+          ),
+          const Divider(indent: 16, endIndent: 16, height: 24),
+          _header(context, 'Batch'),
+          _Tool(
+            icon: Icons.playlist_add_check,
+            color: Colors.amber.shade800,
+            title: 'Batch Processing',
+            subtitle: 'Apply one operation to multiple PDFs at once',
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const BatchScreen())),
+          ),
+          const Divider(indent: 16, endIndent: 16, height: 24),
+          _header(context, 'Organise'),
+          _Tool(
+            icon: Icons.view_module,
+            color: Colors.pink.shade600,
+            title: 'Page Manager',
+            subtitle: 'Reorder, delete, and rotate PDF pages',
+            onTap: () async {
+              final r = await FilePickerService.pickMultipleFiles(
+                  allowedExtensions: ['pdf']);
+              if (r == null || r.isEmpty || !context.mounted) return;
+              Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => PageManagerScreen(pdfFile: r.first)));
+            },
+          ),
+          _Tool(
+            icon: Icons.water_drop_outlined,
+            color: Colors.cyan.shade700,
+            title: 'Watermark',
+            subtitle: 'Add a text watermark to all pages',
+            onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const WatermarkScreen())),
+          ),
+          const Divider(indent: 16, endIndent: 16, height: 24),
+          _header(context, 'Security & Metadata'),
+          _Tool(
+            icon: Icons.lock_outline,
+            color: Colors.blueGrey.shade600,
+            title: 'Password Protect',
+            subtitle: 'Encrypt a PDF or remove its password',
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const PasswordProtectScreen())),
+          ),
           _Tool(
             icon: Icons.edit_document,
             color: Colors.brown.shade500,
@@ -121,7 +195,7 @@ class ToolsScreen extends StatelessWidget {
                   allowedExtensions: ['pdf']);
               if (r == null || r.isEmpty || !context.mounted) return;
               Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => PdfSecurityScreen(pdfFile: r.first)));
+                  builder: (_) => EditMetadataScreen(pdfFile: r.first)));
             },
           ),
           const SizedBox(height: 16),

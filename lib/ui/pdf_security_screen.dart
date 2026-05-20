@@ -3,16 +3,16 @@ import 'package:flutter/material.dart';
 import 'package:quick_pdf/core/pdf_manager.dart';
 import 'package:quick_pdf/services/document_database.dart';
 
-class PdfSecurityScreen extends StatefulWidget {
+class EditMetadataScreen extends StatefulWidget {
   final File pdfFile;
 
-  const PdfSecurityScreen({super.key, required this.pdfFile});
+  const EditMetadataScreen({super.key, required this.pdfFile});
 
   @override
-  State<PdfSecurityScreen> createState() => _PdfSecurityScreenState();
+  State<EditMetadataScreen> createState() => _EditMetadataScreenState();
 }
 
-class _PdfSecurityScreenState extends State<PdfSecurityScreen> {
+class _EditMetadataScreenState extends State<EditMetadataScreen> {
   bool _isProcessing = false;
   final _authorController = TextEditingController();
   final _titleController = TextEditingController();
@@ -127,7 +127,8 @@ class _PdfSecurityScreenState extends State<PdfSecurityScreen> {
         title: _titleController.text.trim().isNotEmpty ? _titleController.text.trim() : null,
         subject: _subjectController.text.trim().isNotEmpty ? _subjectController.text.trim() : null,
       );
-      await DocumentDatabase().insertDocument(updatedFile.path);
+      final thumbPath = await PDFManager.generateThumbnail(updatedFile.path);
+      await DocumentDatabase().insertDocument(updatedFile.path, thumbnailPath: thumbPath);
       if (mounted) {
         PDFManager.hapticFeedbackSuccess();
         Navigator.of(context).pop();

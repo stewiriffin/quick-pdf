@@ -1,3 +1,4 @@
+import 'package:quick_pdf/services/error_logger.dart';
 import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
@@ -98,7 +99,8 @@ class _ScannerScreenState extends State<ScannerScreen>
         });
         HapticFeedback.lightImpact();
       }
-    } catch (e) {
+    } catch (e, stack) {
+      await ErrorLogger.log('scanner', e, stack);
       if (mounted) {
         setState(() {
           _isCapturing = false;
@@ -150,7 +152,8 @@ class _ScannerScreenState extends State<ScannerScreen>
 
     try {
       final File pdfFile = await PDFManager.convertImagesToPDF(List.from(_pages));
-      await DocumentDatabase().insertDocument(pdfFile.path);
+      final thumbPath = await PDFManager.generateThumbnail(pdfFile.path);
+      await DocumentDatabase().insertDocument(pdfFile.path, thumbnailPath: thumbPath);
 
       if (mounted) {
         Navigator.of(context).pushReplacement(

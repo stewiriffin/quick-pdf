@@ -1,3 +1,4 @@
+import 'package:quick_pdf/services/error_logger.dart';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -87,7 +88,8 @@ class _SplitScreenState extends State<SplitScreen> {
       );
 
       for (final f in out) {
-        await DocumentDatabase().insertDocument(f.path);
+        final thumbPath = await PDFManager.generateThumbnail(f.path);
+        await DocumentDatabase().insertDocument(f.path, thumbnailPath: thumbPath);
       }
 
       PDFManager.hapticFeedbackSuccess();
@@ -97,7 +99,8 @@ class _SplitScreenState extends State<SplitScreen> {
           _results = out;
         });
       }
-    } catch (e) {
+    } catch (e, stack) {
+      await ErrorLogger.log('split', e, stack);
       PDFManager.hapticFeedbackError();
       if (mounted) {
         setState(() {
@@ -219,31 +222,35 @@ class _SplitScreenState extends State<SplitScreen> {
                   color: Colors.grey[700])),
         ),
         Card(
-          child: Column(
-            children: [
-              RadioListTile<_SplitMode>(
-                value: _SplitMode.allPages,
-                groupValue: _mode,
-                onChanged: (v) => setState(() => _mode = v!),
-                title: const Text('Split into individual pages'),
-                subtitle: Text(
-                  _pageCount != null
-                      ? 'Creates $_pageCount separate PDF files'
-                      : 'Creates one file per page',
+          child: RadioGroup<_SplitMode>(
+            groupValue: _mode,
+            onChanged: (v) {
+              if (v == _SplitMode.range &&
+                  (_pageCount == null || _pageCount! <= 1)) {
+                return;
+              }
+              setState(() => _mode = v!);
+            },
+            child: Column(
+              children: [
+                RadioListTile<_SplitMode>(
+                  value: _SplitMode.allPages,
+                  title: const Text('Split into individual pages'),
+                  subtitle: Text(
+                    _pageCount != null
+                        ? 'Creates $_pageCount separate PDF files'
+                        : 'Creates one file per page',
+                  ),
                 ),
-              ),
-              const Divider(height: 1, indent: 16, endIndent: 16),
-              RadioListTile<_SplitMode>(
-                value: _SplitMode.range,
-                groupValue: _mode,
-                onChanged: (_pageCount != null && _pageCount! > 1)
-                    ? (v) => setState(() => _mode = v!)
-                    : null,
-                title: const Text('Extract page range'),
-                subtitle: const Text(
-                    'Extract a consecutive range as individual pages'),
-              ),
-            ],
+                const Divider(height: 1, indent: 16, endIndent: 16),
+                const RadioListTile<_SplitMode>(
+                  value: _SplitMode.range,
+                  title: Text('Extract page range'),
+                  subtitle: Text(
+                      'Extract a consecutive range as individual pages'),
+                ),
+              ],
+            ),
           ),
         ),
       ],

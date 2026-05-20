@@ -22,7 +22,7 @@ class DocumentDatabase extends ChangeNotifier {
     String path = join(documentsDirectory.path, 'documents.db');
     return await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -37,6 +37,7 @@ class DocumentDatabase extends ChangeNotifier {
         size INTEGER,
         text_content TEXT,
         thumbnail_path TEXT,
+        is_favourite INTEGER NOT NULL DEFAULT 0,
         dateAdded TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         lastOpened TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -50,9 +51,14 @@ class DocumentDatabase extends ChangeNotifier {
     if (oldVersion < 3) {
       await db.execute('ALTER TABLE documents ADD COLUMN thumbnail_path TEXT');
     }
+    if (oldVersion < 4) {
+      await db.execute(
+          'ALTER TABLE documents ADD COLUMN is_favourite INTEGER NOT NULL DEFAULT 0');
+    }
   }
 
-  Future<void> insertDocument(String path, {String? textContent, String? thumbnailPath}) async {
+  Future<void> insertDocument(String path,
+      {String? textContent, String? thumbnailPath}) async {
     final db = await database;
     final File file = File(path);
     await db.insert(
@@ -63,6 +69,7 @@ class DocumentDatabase extends ChangeNotifier {
         'size': await file.length(),
         'text_content': textContent,
         'thumbnail_path': thumbnailPath,
+        'is_favourite': 0,
         'dateAdded': DateTime.now().toIso8601String(),
         'lastOpened': DateTime.now().toIso8601String(),
       },
@@ -71,28 +78,20 @@ class DocumentDatabase extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Returns the most recently opened documents, automatically purging entries
-  /// whose files have been deleted from disk.
-  Future<List<Map<String, dynamic>>> getRecentDocuments({int limit = 10}) async {
+  Future<List<Map<String, dynamic>>> getAllDocuments() async {
     final db = await database;
-    final all = await db.query(
-      'documents',
-      orderBy: 'lastOpened DESC',
-      limit: limit * 3,
-    );
+    // Favourites first, then lastOpened DESC
+    final all = await db.query('documents',
+        orderBy: 'is_favourite DESC, lastOpened DESC');
 
     final List<Map<String, dynamic>> valid = [];
     final List<String> orphaned = [];
 
     for (final doc in all) {
       final path = doc['path'] as String?;
-      if (path == null) {
-        continue;
-      }
-      final exists = await File(path).exists();
-      if (exists) {
+      if (path == null) continue;
+      if (await File(path).exists()) {
         valid.add(doc);
-        if (valid.length >= limit) break;
       } else {
         orphaned.add(path);
       }
@@ -110,6 +109,26 @@ class DocumentDatabase extends ChangeNotifier {
     return valid;
   }
 
+  Future<void> toggleFavourite(String path) async {
+    final db = await database;
+    final doc = await getDocument(path);
+    if (doc == null) return;
+    final current = (doc['is_favourite'] as int?) ?? 0;
+    await db.update(
+      'documents',
+      {'is_favourite': current == 0 ? 1 : 0},
+      where: 'path = ?',
+      whereArgs: [path],
+    );
+    notifyListeners();
+  }
+
+  Future<void> clearThumbnailPaths() async {
+    final db = await database;
+    await db.update('documents', {'thumbnail_path': null});
+    notifyListeners();
+  }
+
   Future<Map<String, dynamic>?> getDocument(String path) async {
     final db = await database;
     final results = await db.query(
@@ -121,21 +140,21 @@ class DocumentDatabase extends ChangeNotifier {
     return results.isNotEmpty ? results.first : null;
   }
 
-  Future<List<Map<String, dynamic>>> searchDocuments(String query, {int limit = 50}) async {
+  Future<List<Map<String, dynamic>>> searchDocuments(String query,
+      {int limit = 50}) async {
     final db = await database;
     if (query.isEmpty) {
-      return getRecentDocuments(limit: limit);
+      return getAllDocuments();
     }
     final String searchQuery = '%$query%';
     final results = await db.query(
       'documents',
       where: 'name LIKE ? OR text_content LIKE ?',
       whereArgs: [searchQuery, searchQuery],
-      orderBy: 'lastOpened DESC',
+      orderBy: 'is_favourite DESC, lastOpened DESC',
       limit: limit * 2,
     );
 
-    // Filter out orphaned entries (async)
     final valid = <Map<String, dynamic>>[];
     for (final doc in results) {
       final path = doc['path'] as String?;
@@ -170,7 +189,6 @@ class DocumentDatabase extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Renames a document in the database after the underlying file has been moved.
   Future<void> updatePath(String oldPath, String newPath) async {
     final db = await database;
     final File newFile = File(newPath);

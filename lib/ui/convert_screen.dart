@@ -1,3 +1,4 @@
+import 'package:quick_pdf/services/error_logger.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:quick_pdf/core/pdf_manager.dart';
@@ -82,7 +83,8 @@ class _ConvertScreenState extends State<ConvertScreen> {
         outputName: _nameController.text.trim(),
       );
 
-      await DocumentDatabase().insertDocument(pdf.path);
+      final thumbPath = await PDFManager.generateThumbnail(pdf.path);
+      await DocumentDatabase().insertDocument(pdf.path, thumbnailPath: thumbPath);
       PDFManager.hapticFeedbackSuccess();
 
       if (mounted) {
@@ -92,7 +94,8 @@ class _ConvertScreenState extends State<ConvertScreen> {
           ),
         );
       }
-    } catch (e) {
+    } catch (e, stack) {
+      await ErrorLogger.log('convert', e, stack);
       PDFManager.hapticFeedbackError();
       if (mounted) {
         setState(() => _isConverting = false);

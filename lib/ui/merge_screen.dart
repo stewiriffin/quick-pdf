@@ -1,3 +1,4 @@
+import 'package:quick_pdf/services/error_logger.dart';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -203,7 +204,8 @@ class _MergeScreenState extends State<MergeScreen> {
         },
       );
 
-      await DocumentDatabase().insertDocument(merged.path);
+      final thumbPath = await PDFManager.generateThumbnail(merged.path);
+      await DocumentDatabase().insertDocument(merged.path, thumbnailPath: thumbPath);
       PDFManager.hapticFeedbackSuccess();
 
       if (mounted) {
@@ -213,7 +215,8 @@ class _MergeScreenState extends State<MergeScreen> {
           ),
         );
       }
-    } catch (e) {
+    } catch (e, stack) {
+      await ErrorLogger.log('merge', e, stack);
       PDFManager.hapticFeedbackError();
       if (mounted) {
         setState(() => _isMerging = false);

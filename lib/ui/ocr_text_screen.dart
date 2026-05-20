@@ -1,3 +1,4 @@
+import 'package:quick_pdf/services/error_logger.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -114,12 +115,16 @@ class _OcrTextScreenState extends State<OcrTextScreen> {
       // Persist extracted text for full-text search
       final allText = results.map((r) => r.text).join('\n\n---\n\n');
       if (allText.trim().isNotEmpty) {
-        await DocumentDatabase().insertDocument(
-          file.path,
-          textContent: allText,
-        );
+        final db = DocumentDatabase();
+        final existing = await db.getDocument(file.path);
+        if (existing != null) {
+          await db.updateTextContent(file.path, allText);
+        } else {
+          await db.insertDocument(file.path, textContent: allText);
+        }
       }
-    } catch (e) {
+    } catch (e, stack) {
+      await ErrorLogger.log('ocr', e, stack);
       if (mounted) {
         setState(() => _isProcessing = false);
         ScaffoldMessenger.of(context).showSnackBar(

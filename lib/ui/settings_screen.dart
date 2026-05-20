@@ -2,8 +2,17 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:quick_pdf/providers/theme_provider.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:quick_pdf/providers/theme_provider.dart';
+import 'package:quick_pdf/services/ad_service.dart';
+import 'package:quick_pdf/services/document_database.dart';
+
+// ── Shared prefs keys ─────────────────────────────────────────────────────────
+const String kPrefImageQuality = 'default_image_quality';
+const String kPrefOcrLanguage = 'ocr_language';
+const String kPrefAdsEnabled = 'ads_enabled';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -14,47 +23,133 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   String _storageUsed = '…';
+  String _cacheUsed = '…';
   bool _clearingCache = false;
+  String _appVersion = '…';
+
+  // User preferences
+  int _defaultQuality = 75;
+  String _ocrLanguage = 'en';
+  bool _adsEnabled = true;
+
+  static const List<Map<String, String>> _ocrLanguages = [
+    {'label': 'English', 'code': 'en'},
+    {'label': 'French', 'code': 'fr'},
+    {'label': 'Spanish', 'code': 'es'},
+    {'label': 'German', 'code': 'de'},
+    {'label': 'Arabic', 'code': 'ar'},
+    {'label': 'Swahili', 'code': 'sw'},
+  ];
 
   @override
   void initState() {
     super.initState();
+    _loadPrefs();
     _calcStorage();
+    _loadVersion();
+  }
+
+  Future<void> _loadPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        _defaultQuality = prefs.getInt(kPrefImageQuality) ?? 75;
+        _ocrLanguage = prefs.getString(kPrefOcrLanguage) ?? 'en';
+        _adsEnabled = prefs.getBool(kPrefAdsEnabled) ?? true;
+      });
+    }
+  }
+
+  Future<void> _loadVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (mounted) {
+        setState(() => _appVersion =
+            '${info.version} (build ${info.buildNumber})');
+      }
+    } catch (_) {
+      if (mounted) setState(() => _appVersion = '1.0.1');
+    }
   }
 
   Future<void> _calcStorage() async {
     try {
-      final dir = await getApplicationDocumentsDirectory();
-      int total = 0;
-      await for (final e in dir.list(recursive: true, followLinks: false)) {
-        if (e is File) total += await e.length();
+      int docTotal = 0;
+      final docDir = await getApplicationDocumentsDirectory();
+      await for (final e
+          in docDir.list(recursive: true, followLinks: false)) {
+        if (e is File) docTotal += await e.length();
       }
+
+      int cacheTotal = 0;
+      try {
+        final cacheDir = await getApplicationCacheDirectory();
+        await for (final e
+            in cacheDir.list(recursive: true, followLinks: false)) {
+          if (e is File) cacheTotal += await e.length();
+        }
+      } catch (_) {}
+
       if (mounted) {
-        setState(() => _storageUsed = total < 1024 * 1024
-            ? '${(total / 1024).toStringAsFixed(1)} KB'
-            : '${(total / 1024 / 1024).toStringAsFixed(2)} MB');
+        setState(() {
+          _storageUsed = _fmt(docTotal);
+          _cacheUsed = _fmt(cacheTotal);
+        });
       }
     } catch (_) {
-      if (mounted) setState(() => _storageUsed = 'Unknown');
+      if (mounted) setState(() { _storageUsed = 'Unknown'; _cacheUsed = '0 B'; });
     }
   }
 
   Future<void> _clearCache() async {
     setState(() => _clearingCache = true);
     try {
-      final dir = await getApplicationDocumentsDirectory();
-      int freed = 0, count = 0;
-      await for (final e in dir.list(recursive: true, followLinks: false)) {
+      int freed = 0;
+      int count = 0;
+
+      // Clear thumbnails from cache directory
+      try {
+        final cacheDir = await getApplicationCacheDirectory();
+        final thumbDir = Directory('${cacheDir.path}/thumbnails');
+        if (await thumbDir.exists()) {
+          await for (final e
+              in thumbDir.list(recursive: true, followLinks: false)) {
+            if (e is File) {
+              freed += await e.length();
+              await e.delete();
+              count++;
+            }
+          }
+        }
+        // Clear other temp files in cache root
+        await for (final e
+            in cacheDir.list(recursive: false, followLinks: false)) {
+          if (e is File) {
+            final n = e.path.split('/').last.toLowerCase();
+            if (n.endsWith('.tmp') || n.endsWith('.cache')) {
+              freed += await e.length();
+              await e.delete();
+              count++;
+            }
+          }
+        }
+      } catch (_) {}
+
+      // Clear orphaned thumb refs in documents dir
+      final docDir = await getApplicationDocumentsDirectory();
+      await for (final e
+          in docDir.list(recursive: false, followLinks: false)) {
         if (e is File) {
           final n = e.path.split('/').last.toLowerCase();
-          if (n.startsWith('thumb_') || n.startsWith('ocr_') ||
-              n.endsWith('.tmp') || n.endsWith('.cache')) {
+          if (n.startsWith('thumb_') || n.endsWith('.tmp')) {
             freed += await e.length();
             await e.delete();
             count++;
           }
         }
       }
+
+      await DocumentDatabase().clearThumbnailPaths();
       await _calcStorage();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -67,7 +162,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e'), behavior: SnackBarBehavior.floating));
+            SnackBar(
+                content: Text('Error: $e'),
+                behavior: SnackBarBehavior.floating));
       }
     } finally {
       if (mounted) setState(() => _clearingCache = false);
@@ -82,12 +179,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   String _getThemeModeName(ThemeMode mode) {
     switch (mode) {
-      case ThemeMode.light:
-        return 'Light';
-      case ThemeMode.dark:
-        return 'Dark';
-      case ThemeMode.system:
-        return 'System (Default)';
+      case ThemeMode.light: return 'Light';
+      case ThemeMode.dark: return 'Dark';
+      case ThemeMode.system: return 'System (Default)';
     }
   }
 
@@ -95,49 +189,34 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final ThemeMode currentMode = ref.read(themeProvider);
     final ThemeMode? newMode = await showDialog<ThemeMode>(
       context: context,
-      builder: (BuildContext context) {
+      builder: (BuildContext ctx) {
         return AlertDialog(
           title: const Text('Select Theme Mode'),
-          content: SingleChildScrollView(
-            child: ListBody(
-              children: <Widget>[
-                ListTile(
-                  leading: Radio<ThemeMode>(
-                    value: ThemeMode.light,
-                    groupValue: currentMode,
-                    onChanged: (ThemeMode? value) {
-                      Navigator.of(context).pop(value);
-                    },
+          content: RadioGroup<ThemeMode>(
+            groupValue: currentMode,
+            onChanged: (ThemeMode? value) => Navigator.of(ctx).pop(value),
+            child: const SingleChildScrollView(
+              child: ListBody(
+                children: <Widget>[
+                  ListTile(
+                    leading: Radio<ThemeMode>(value: ThemeMode.light),
+                    title: Text('Light'),
                   ),
-                  title: const Text('Light'),
-                ),
-                ListTile(
-                  leading: Radio<ThemeMode>(
-                    value: ThemeMode.dark,
-                    groupValue: currentMode,
-                    onChanged: (ThemeMode? value) {
-                      Navigator.of(context).pop(value);
-                    },
+                  ListTile(
+                    leading: Radio<ThemeMode>(value: ThemeMode.dark),
+                    title: Text('Dark'),
                   ),
-                  title: const Text('Dark'),
-                ),
-                ListTile(
-                  leading: Radio<ThemeMode>(
-                    value: ThemeMode.system,
-                    groupValue: currentMode,
-                    onChanged: (ThemeMode? value) {
-                      Navigator.of(context).pop(value);
-                    },
+                  ListTile(
+                    leading: Radio<ThemeMode>(value: ThemeMode.system),
+                    title: Text('System (Default)'),
                   ),
-                  title: const Text('System (Default)'),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );
       },
     );
-
     if (newMode != null && newMode != currentMode) {
       ref.read(themeProvider.notifier).setThemeMode(newMode);
     }
@@ -152,75 +231,144 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-           // ── Appearance ──
-           _CardSection(
-             title: 'Appearance',
-             children: [
+          // ── Appearance ──
+          _CardSection(title: 'Appearance', children: [
             ListTile(
               title: const Text('Theme Mode'),
               subtitle: Text(_getThemeModeName(ref.watch(themeProvider))),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _showThemeModeDialog(context),
             ),
-             ],
-           ),
+          ]),
+          const SizedBox(height: 12),
+
+          // ── Processing defaults ──
+          _CardSection(title: 'Processing defaults', children: [
+            ListTile(
+              title: const Text('Default image quality'),
+              subtitle: Text('$_defaultQuality%  (used by compress & convert)'),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Slider(
+                value: _defaultQuality.toDouble(),
+                min: 50,
+                max: 100,
+                divisions: 10,
+                label: '$_defaultQuality%',
+                onChanged: (v) async {
+                  final q = v.round();
+                  setState(() => _defaultQuality = q);
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.setInt(kPrefImageQuality, q);
+                },
+              ),
+            ),
+            const Divider(height: 1, indent: 16, endIndent: 16),
+            ListTile(
+              title: const Text('OCR language'),
+              subtitle: Text(_ocrLanguages
+                  .firstWhere((l) => l['code'] == _ocrLanguage,
+                      orElse: () => {'label': 'English', 'code': 'en'})['label']!),
+              trailing: DropdownButton<String>(
+                value: _ocrLanguage,
+                underline: const SizedBox.shrink(),
+                items: _ocrLanguages
+                    .map((l) => DropdownMenuItem(
+                          value: l['code'],
+                          child: Text(l['label']!),
+                        ))
+                    .toList(),
+                onChanged: (v) async {
+                  if (v == null) return;
+                  setState(() => _ocrLanguage = v);
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.setString(kPrefOcrLanguage, v);
+                },
+              ),
+            ),
+          ]),
           const SizedBox(height: 12),
 
           // ── Storage ──
-          _CardSection(
-            title: 'Storage',
-            children: [
-              ListTile(
-                leading: Icon(Icons.storage, color: cs.primary),
-                title: const Text('Used by QuickPDF'),
-                subtitle: Text(_storageUsed),
-                trailing: _clearingCache
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : TextButton(
-                        onPressed: _clearCache,
-                        child: const Text('Clear cache'),
-                      ),
-              ),
-            ],
-          ),
+          _CardSection(title: 'Storage', children: [
+            ListTile(
+              leading: Icon(Icons.folder_outlined, color: cs.primary),
+              title: const Text('Documents'),
+              subtitle: Text(_storageUsed),
+            ),
+            const Divider(height: 1, indent: 16, endIndent: 16),
+            ListTile(
+              leading: Icon(Icons.cached, color: cs.primary),
+              title: const Text('Cache (thumbnails & temp files)'),
+              subtitle: Text(_cacheUsed),
+              trailing: _clearingCache
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : TextButton(
+                      onPressed: _clearCache,
+                      child: const Text('Clear'),
+                    ),
+            ),
+          ]),
+          const SizedBox(height: 12),
+
+          // ── Ads ──
+          _CardSection(title: 'Ads', children: [
+            SwitchListTile(
+              title: const Text('Show ads'),
+              subtitle: const Text('Disabling hides ads for testing'),
+              value: _adsEnabled,
+              onChanged: (v) async {
+                setState(() => _adsEnabled = v);
+                AdService.adsEnabled = v;
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setBool(kPrefAdsEnabled, v);
+              },
+            ),
+          ]),
           const SizedBox(height: 12),
 
           // ── Privacy ──
-          _CardSection(
-            title: 'Privacy',
-            children: [
-              ListTile(
-                leading: Icon(Icons.shield_outlined, color: cs.primary),
-                title: const Text('Privacy First'),
-                subtitle: const Text(
-                    'All document processing is on-device. Ads are served by Google AdMob and require internet access.'),
-              ),
-              const Divider(height: 1, indent: 16, endIndent: 16),
-              ListTile(
-                leading: Icon(Icons.policy_outlined, color: cs.primary),
-                title: const Text('Privacy Policy'),
-                trailing:
-                    Icon(Icons.chevron_right, color: Colors.grey[400]),
-                onTap: () => _showPrivacyPolicy(context),
-              ),
-            ],
-          ),
+          _CardSection(title: 'Privacy', children: [
+            ListTile(
+              leading: Icon(Icons.shield_outlined, color: cs.primary),
+              title: const Text('Privacy First'),
+              subtitle: const Text(
+                  'All document processing is on-device. Ads are served by Google AdMob.'),
+            ),
+            const Divider(height: 1, indent: 16, endIndent: 16),
+            ListTile(
+              leading: Icon(Icons.policy_outlined, color: cs.primary),
+              title: const Text('Privacy Policy'),
+              trailing: Icon(Icons.chevron_right, color: Colors.grey[400]),
+              onTap: () => _showPrivacyPolicy(context),
+            ),
+          ]),
           const SizedBox(height: 12),
 
           // ── About ──
-          _CardSection(
-            title: 'About',
-            children: [
-              ListTile(
-                leading: Icon(Icons.info_outline, color: cs.primary),
-                title: const Text('QuickPDF'),
-                subtitle: const Text('Version 1.0.1 · Built with Flutter'),
+          _CardSection(title: 'About', children: [
+            ListTile(
+              leading: Icon(Icons.info_outline, color: cs.primary),
+              title: const Text('QuickPDF'),
+              subtitle: Text('Version $_appVersion · Built with Flutter'),
+            ),
+            const Divider(height: 1, indent: 16, endIndent: 16),
+            ListTile(
+              leading: Icon(Icons.balance_outlined, color: cs.primary),
+              title: const Text('Open-source licences'),
+              trailing: Icon(Icons.chevron_right, color: Colors.grey[400]),
+              onTap: () => showLicensePage(
+                context: context,
+                applicationName: 'QuickPDF',
+                applicationVersion: _appVersion,
               ),
-            ],
-          ),
+            ),
+          ]),
+          const SizedBox(height: 24),
         ],
       ),
     );
@@ -268,8 +416,6 @@ The app displays ads via **Google AdMob**, which may collect:
 - IP address / approximate location
 - App interaction data (for ad relevance)
 
-See Section 5 for full details on advertising.
-
 ---
 
 ### 2. Permissions Used
@@ -282,74 +428,36 @@ See Section 5 for full details on advertising.
 | **Internet** | Required by Google AdMob to serve ads |
 | **Advertising ID** | Used by AdMob for personalised ads |
 
-No permission is used beyond its stated purpose.
-
 ---
 
 ### 3. Files & Documents
 
 - Files you open or create are stored **only on your device**.
 - QuickPDF never uploads, syncs, or transmits any file content.
-- Temporary files (thumbnails, scan images) are stored in the app's private
-  directory and cleaned up automatically. Clear manually via **Settings → Clear cache**.
+- Temporary files are stored in the app's private directory and cleaned up automatically.
 
 ---
 
 ### 4. OCR & Text Recognition
 
-Text recognition is performed **fully offline** using Google ML Kit's on-device
-models. Recognised text never leaves your device.
+Text recognition is performed **fully offline** using Google ML Kit's on-device models.
+Recognised text never leaves your device.
 
 ---
 
 ### 5. Advertising (Google AdMob)
 
 QuickPDF uses **Google AdMob** to display banner and interstitial ads.
-AdMob is a third-party advertising service operated by Google LLC.
-
-**What AdMob may collect:**
-- Advertising ID (Android AAID) for ad personalisation
-- IP address and approximate geographic location
-- App usage signals for ad frequency and relevance
 
 **Your choices:**
-- To opt out of personalised ads: **Android Settings → Google → Ads →
-  Opt out of Ads Personalisation**
-- To reset your Advertising ID: **Android Settings → Google → Ads →
-  Reset advertising ID**
+- To opt out of personalised ads: **Android Settings → Google → Ads → Opt out**
+- To reset your Advertising ID: **Android Settings → Google → Ads → Reset ID**
 
 Google's Privacy Policy: https://policies.google.com/privacy
-Google AdMob Terms: https://developers.google.com/admob/terms
 
 ---
 
-### 6. Third-Party SDKs
-
-| SDK | Purpose | Sends data off-device? |
-|---|---|---|
-| Google AdMob | Advertising | Yes (ad targeting — see §5) |
-| Google ML Kit | On-device OCR | No |
-
-No analytics, crash-reporting, or other tracking SDKs are used.
-
----
-
-### 7. Children's Privacy
-
-QuickPDF does not knowingly target or collect data from children under 13.
-AdMob is configured for general audiences. If you believe a child has provided
-personal information via ads, contact us at the address below.
-
----
-
-### 8. Changes to This Policy
-
-If a future update changes how data is handled, this policy will be updated,
-the effective date revised, and users notified via the Play Store update notes.
-
----
-
-### 9. Contact
+### 6. Contact
 
 Questions about this policy:
 **stewiegriffin3108ia@gmail.com**
